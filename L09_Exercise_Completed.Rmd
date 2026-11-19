@@ -1,0 +1,346 @@
+---
+title: "L09 — Evaluative Exercise 1"
+subtitle: "Block 1 · Descriptive Statistics · In-class exercise"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    math_method: mathml
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# The data
+
+`L09_workshops.csv` records one month of activity for the 320 artisan workshops
+that belong to a regional consortium. Every statement made below describes these
+320 workshops exactly: nothing is inferred about workshops outside the file.
+
+| Column | Meaning |
+|---|---|
+| `workshop_id` | Identifier of the workshop |
+| `province_code` | Province of registration, coded 1 to 4 |
+| `craft` | Craft practised: Ceramics, Leather, Woodwork, Textiles |
+| `qualification` | Level held by the head of the workshop: Apprentice, Craftsman, Master |
+| `years_active` | Completed years the workshop has been active |
+| `price_per_piece` | List price of a piece, averaged over the workshop's catalogue, in euros |
+| `pieces_sold` | Pieces sold during the month |
+| `quality_score` | Consortium quality score for the month, from 1 to 5 |
+| `monthly_revenue` | Total takings for the month, in euros: sales net of discounts, plus commissions, courses and repairs |
+| `exports` | Whether the workshop sold abroad during the month |
+
+Because of discounts on one side and non-sales income on the other,
+`monthly_revenue` is not the product of `price_per_piece` and `pieces_sold`.
+
+Four exercises. Fill the chunks; the questions that close each one are there for
+you to check your own understanding, and are not handed in.
+
+```{r import}
+workshops <- read.csv("L09_workshops.csv", stringsAsFactors = FALSE)
+
+str(workshops)
+```
+
+---
+
+# Exercise 1 — Measurement scales, position and shape
+
+1. Run `summary()` on the data frame and identify the column with missing values
+   and how many there are.
+2. Compute `mean(workshops$province_code)`. Then convert `qualification` into an
+   **ordered** factor with its levels in the correct order and check it with
+   `table()`.
+3. Compute mean, median and the five-number summary of `monthly_revenue`, and the
+   sample skewness $\frac{1}{n}\sum_i z_i^3$, where $z_i$ is the standardized
+   variable computed with `mean()` and `sd()`.
+4. Recompute mean and median after removing the largest workshop, with
+   `workshops$monthly_revenue[-which.max(workshops$monthly_revenue)]`, and compare
+   the two displacements.
+
+```{r ex1}
+summary(workshops)
+
+# Report only columns that contain missing observations.
+missing_counts <- colSums(is.na(workshops))
+print(missing_counts[missing_counts > 0])
+stopifnot(nrow(workshops) == 320, ncol(workshops) == 10,
+          missing_counts["quality_score"] == 11)
+
+mean(workshops$province_code)
+workshops$qualification <- factor(
+  workshops$qualification,
+  levels = c("Apprentice", "Craftsman", "Master"),
+  ordered = TRUE
+)
+levels(workshops$qualification)
+is.ordered(workshops$qualification)
+table(workshops$qualification)
+
+revenue <- workshops$monthly_revenue
+revenue_mean <- mean(revenue)
+revenue_median <- median(revenue)
+z <- (revenue - mean(revenue)) / sd(revenue)
+revenue_skewness <- mean(z^3)
+
+print(c(Mean_EUR = revenue_mean, Median_EUR = revenue_median,
+        Sample_skewness = revenue_skewness))
+print(setNames(fivenum(revenue),
+               c("Minimum", "Lower hinge", "Median", "Upper hinge", "Maximum")))
+
+# This expression removes exactly one observation; keep the full dataset intact.
+revenue_without_largest <-
+  workshops$monthly_revenue[-which.max(workshops$monthly_revenue)]
+stopifnot(length(revenue_without_largest) == length(revenue) - 1)
+mean_without_largest <- mean(revenue_without_largest)
+median_without_largest <- median(revenue_without_largest)
+
+print(data.frame(
+  Statistic = c("Mean (EUR)", "Median (EUR)"),
+  Full_data = c(revenue_mean, revenue_median),
+  Largest_removed = c(mean_without_largest, median_without_largest),
+  Change_removed_minus_full = c(mean_without_largest - revenue_mean,
+                               median_without_largest - revenue_median)
+))
+
+```
+
+> **(a)** Classify `province_code`, `qualification`, `years_active` and
+> `monthly_revenue` on the four measurement scales, and state for each the highest
+> admissible measure of centre. Why did R return a number for the mean of
+> `province_code`?
+> **(b)** What does the sign of the skewness, together with the relative position
+> of mean and median, say about the distribution of the revenue?
+> **(c)** Which of the two summaries moved when the largest workshop was removed,
+> and which property accounts for it?
+
+---
+
+# Exercise 2 — Variability and concentration
+
+1. Compute the standard deviation and the IQR of `monthly_revenue`, and the
+   coefficient of variation $s/\bar{x}$ of `monthly_revenue`, `pieces_sold` and
+   `price_per_piece`.
+2. For $k = 1.5, 2, 3$, compute the observed proportion of values within $k$
+   standard deviations of the mean and compare it with the Bienaymé–Chebyshev
+   bound $1 - 1/k^2$.
+3. Draw the Lorenz curve of `monthly_revenue` and compute the Gini index as twice
+   the area between the diagonal and the curve:
+
+```r
+x <- sort(workshops$monthly_revenue)
+p <- (0:length(x)) / length(x)          # cumulative share of workshops
+q <- c(0, cumsum(x)) / sum(x)           # cumulative share of total revenue
+plot(p, q, type = "l"); abline(0, 1, lty = 2)
+
+area <- sum(diff(p) * (head(q, -1) + tail(q, -1)) / 2)
+1 - 2 * area
+```
+
+   Read off the share of the total taken by the poorer half and by the top decile.
+
+4. Draw the histogram of `monthly_revenue` with `breaks = 10` and with
+   `breaks = 60`. Assign each call to an object and report, for both, the number
+   of classes actually drawn, `length(h$counts)`, and their width,
+   `diff(h$breaks)[1]`.
+
+```{r ex2, fig.height=4}
+revenue <- workshops$monthly_revenue
+print(c(SD_EUR = sd(revenue), IQR_EUR = IQR(revenue)))
+
+cv_variables <- c("monthly_revenue", "pieces_sold", "price_per_piece")
+cv <- sapply(workshops[cv_variables], function(x) sd(x) / mean(x))
+print(data.frame(Variable = names(cv), CV = unname(cv)))
+
+k <- c(1.5, 2, 3)
+observed_proportion <- sapply(k, function(ki) {
+  mean(abs(revenue - mean(revenue)) <= ki * sd(revenue))
+})
+chebyshev_bound <- 1 - 1 / k^2
+print(data.frame(
+  k = k,
+  Observed_proportion = observed_proportion,
+  Chebyshev_lower_bound = chebyshev_bound,
+  Observed_minus_bound = observed_proportion - chebyshev_bound
+))
+
+x <- sort(workshops$monthly_revenue)
+p <- (0:length(x)) / length(x)
+q <- c(0, cumsum(x)) / sum(x)
+# A square plotting region keeps both cumulative-share axes between 0 and 1.
+old_pty <- par("pty")
+par(pty = "s")
+plot(p, q, type = "l", lwd = 2, col = "#245E85", asp = 1,
+     xlim = c(0, 1), ylim = c(0, 1), xaxs = "i", yaxs = "i",
+     main = "Lorenz curve of monthly revenue",
+     xlab = "Cumulative share of workshops",
+     ylab = "Cumulative share of total revenue")
+abline(0, 1, lty = 2, col = "grey50")
+legend("topleft", c("Monthly revenue", "Equal-revenue diagonal"),
+       col = c("#245E85", "grey50"), lty = c(1, 2), bty = "n", cex = 0.8)
+par(pty = old_pty)
+
+# Trapezoids give the area under the empirical Lorenz curve.
+area <- sum(diff(p) * (head(q, -1) + tail(q, -1)) / 2)
+gini <- 1 - 2 * area
+print(c(Lorenz_area = area, Gini_index = gini))
+
+# For 320 workshops, these groups contain exactly 160 and 32 observations.
+bottom_n <- length(x) / 2
+top_n <- length(x) / 10
+bottom50_share <- sum(head(x, bottom_n)) / sum(x)
+top10_share <- sum(tail(x, top_n)) / sum(x)
+print(data.frame(
+  Group = c("Bottom 50%", "Top 10%"),
+  Workshops = c(bottom_n, top_n),
+  Revenue_share = c(bottom50_share, top10_share),
+  Revenue_percent = 100 * c(bottom50_share, top10_share)
+))
+
+h10 <- hist(revenue, breaks = 10, col = "#9DBDD2", border = "white",
+            main = "Monthly revenue: breaks = 10",
+            xlab = "Monthly revenue (EUR)", ylab = "Number of workshops")
+h60 <- hist(revenue, breaks = 60, col = "#9DBDD2", border = "white",
+            main = "Monthly revenue: breaks = 60",
+            xlab = "Monthly revenue (EUR)", ylab = "Number of workshops")
+print(data.frame(
+  Requested_breaks = c(10, 60),
+  Actual_bins = c(length(h10$counts), length(h60$counts)),
+  Bin_width_EUR = c(diff(h10$breaks)[1], diff(h60$breaks)[1])
+))
+
+```
+
+> **(a)** Why can the standard deviations of `monthly_revenue` and `pieces_sold`
+> not be compared directly, and what does the coefficient of variation change?
+> **(b)** The observed proportions exceed the Chebyshev bounds by a wide margin.
+> Is that a defect of the inequality, of the data, or of neither?
+> **(c)** What does the Gini index measure that the standard deviation does not?
+> Which of the two histograms would you use, and why is the choice not neutral?
+
+---
+
+# Exercise 3 — Association between two categorical variables
+
+1. Build the contingency table of `qualification` by `craft` and the conditional
+   distribution of `qualification` within each craft
+   (`prop.table(tab, margin = 2)`).
+2. Compute the chi-square statistic with `chisq.test()` and Cramér's V,
+   $V = \sqrt{\chi^2 / (n \cdot (\min(r,c) - 1))}$.
+3. Measure the dependence in mean of `price_per_piece` on `qualification` through
+   eta-squared, the ratio of the between-group deviance to the total deviance, and
+   draw the box-plots of `price_per_piece` by `qualification`:
+
+```r
+grand_mean  <- mean(workshops$price_per_piece)
+group_means <- tapply(workshops$price_per_piece, workshops$qualification, mean)
+group_n     <- table(workshops$qualification)
+
+sum(group_n * (group_means - grand_mean)^2) /
+  sum((workshops$price_per_piece - grand_mean)^2)
+```
+
+```{r ex3, fig.height=4}
+tab <- table(workshops$qualification, workshops$craft)
+print(tab)
+conditional <- prop.table(tab, margin = 2)
+print(conditional)
+
+# The supplied setup hides warnings, so capture and report any test warning.
+chi_warnings <- character(0)
+chi <- withCallingHandlers(
+  chisq.test(tab),
+  warning = function(w) {
+    chi_warnings <<- c(chi_warnings, conditionMessage(w))
+    invokeRestart("muffleWarning")
+  }
+)
+print(chi)
+n <- sum(tab)
+r <- nrow(tab)
+c <- ncol(tab)
+cramers_v <- sqrt(unname(chi$statistic) / (n * (min(r, c) - 1)))
+print(c(Cramers_V = cramers_v))
+
+cat("Expected counts:\n")
+print(chi$expected)
+print(c(Minimum_expected = min(chi$expected),
+        Cells_below_5 = sum(chi$expected < 5),
+        Cells_below_1 = sum(chi$expected < 1)))
+cat("All expected counts are at least 5:", all(chi$expected >= 5), "\n")
+cat("Chi-square warnings:",
+    if (length(chi_warnings)) paste(chi_warnings, collapse = "; ") else "none",
+    "\n")
+cat("Each workshop has one record; independence between workshops cannot",
+    "be established from the contingency table alone.\n")
+
+grand_mean <- mean(workshops$price_per_piece)
+group_means <- tapply(workshops$price_per_piece, workshops$qualification, mean)
+group_n <- table(workshops$qualification)
+between_deviance <- sum(group_n * (group_means - grand_mean)^2)
+total_deviance <- sum((workshops$price_per_piece - grand_mean)^2)
+eta_squared <- between_deviance / total_deviance
+print(c(Between_group_deviance = between_deviance,
+        Total_deviance = total_deviance, Eta_squared = eta_squared))
+
+boxplot(price_per_piece ~ qualification, data = workshops,
+        main = "Price per piece by qualification",
+        xlab = "Qualification (ordered)", ylab = "Price per piece (EUR)",
+        col = c("#C9DBE8", "#91B5CD", "#5689AE"))
+
+```
+
+> **(a)** Why is a comparison of the raw counts not evidence of association, and
+> which comparison is? What would independence in distribution look like in the
+> table of conditional distributions?
+> **(b)** Which of $\chi^2$ and $V$ would be roughly unchanged if the consortium
+> had ten times as many workshops with the same percentage profile, and why?
+> **(c)** Interpret the value of eta-squared in one sentence.
+
+---
+
+# Exercise 4 — Association between two quantitative variables
+
+1. Compute the Pearson and the Spearman correlation matrices for `years_active`,
+   `price_per_piece`, `pieces_sold`, `quality_score` and `monthly_revenue`
+   (`use = "complete.obs"`), and subtract the first from the second.
+2. Plot `quality_score` against `pieces_sold` and compute the Pearson correlation
+   of the pair.
+
+```{r ex4, fig.height=4}
+variables <- c("years_active", "price_per_piece", "pieces_sold",
+               "quality_score", "monthly_revenue")
+quantitative <- workshops[variables]
+cat("Complete observations for both matrices:",
+    sum(complete.cases(quantitative)), "of", nrow(workshops), "\n")
+
+pearson <- cor(quantitative, method = "pearson", use = "complete.obs")
+spearman <- cor(quantitative, method = "spearman", use = "complete.obs")
+correlation_difference <- spearman - pearson
+cat("Pearson correlation matrix:\n")
+print(pearson, digits = 4)
+cat("Spearman correlation matrix:\n")
+print(spearman, digits = 4)
+cat("Difference: Spearman minus Pearson:\n")
+print(correlation_difference, digits = 4)
+
+# Remove incomplete pairs together so the two vectors remain aligned.
+pair <- workshops[complete.cases(workshops[c("quality_score", "pieces_sold")]),
+                  c("quality_score", "pieces_sold")]
+pair_r <- cor(pair$pieces_sold, pair$quality_score, method = "pearson")
+print(c(Complete_pairs = nrow(pair), Pearson_r = pair_r))
+plot(pair$pieces_sold, pair$quality_score,
+     pch = 19, col = adjustcolor("#245E85", alpha.f = 0.6),
+     main = sprintf("Quality score against pieces sold\nPearson r = %.4f; n = %d",
+                    pair_r, nrow(pair)),
+     xlab = "Pieces sold during the month",
+     ylab = "Consortium quality score (1 to 5)")
+
+```
+
+> **(a)** Which variable appears in the two largest Spearman–Pearson gaps, and
+> what does a positive gap indicate about the form of the relationship?
+> **(b)** The correlation between `quality_score` and `pieces_sold` is close to
+> zero. Does it follow that the two variables are unrelated?
